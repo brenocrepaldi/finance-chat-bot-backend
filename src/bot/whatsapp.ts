@@ -64,7 +64,14 @@ export class WhatsAppBot {
         if (qr) {
           console.log('\n📱 Escaneie o QR Code abaixo com seu WhatsApp:\n');
           qrcode.generate(qr, { small: true });
-          console.log('\n');
+          
+          // Mostra o texto do QR code para sites geradores
+          console.log('\n🔗 Se o QR code acima estiver quebrado, copie o texto abaixo:');
+          console.log('━'.repeat(80));
+          console.log(qr);
+          console.log('━'.repeat(80));
+          console.log('\n📌 Cole em: https://www.qr-code-generator.com/ ou https://goqr.me/');
+          console.log('   Depois escaneie o QR code gerado pelo site!\n');
         }
 
         // Conectado
