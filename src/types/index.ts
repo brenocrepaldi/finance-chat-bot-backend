@@ -3,11 +3,12 @@
  */
 
 export interface ParsedMessage {
-  type: 'entrada' | 'saida' | 'diario' | 'saldo' | 'resumo' | 'hoje' | 'semana' | 'mes';
+  type: 'entrada' | 'saida' | 'diario' | 'saldo' | 'resumo' | 'hoje' | 'semana' | 'mes' | 'performance' | 'comparar' | 'previsao';
   value?: number; // Opcional para comandos de consulta
   date: Date;
   rawText: string;
   shouldReplace?: boolean; // true para substituir, false (padrão) para somar
+  targetDate?: Date; // Para comandos como "saldo 16/12"
 }
 
 export interface SheetConfig {
@@ -63,4 +64,16 @@ export interface PeriodSummary {
   totalDiario: number;
   saldoFinal: number;
   dias: DayData[];
+}
+
+export interface MonthSummary {
+  month: number;
+  year: number;
+  totalEntradas: number;      // Linha 40
+  totalSaidas: number;         // Linha 40
+  totalDiario: number;         // Linha 40
+  saidaTotal: number;          // Linha 43 (Saídas + Diário)
+  performance: number;         // Linha 43 (Entradas - Saída Total)
+  diasComDados: number;
+  mediaDiaria: number;
 }

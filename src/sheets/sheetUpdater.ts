@@ -1,5 +1,5 @@
 import { GoogleSheetsService } from './googleSheets';
-import { UpdateRequest, SheetConfig, BotResponse, DayData, PeriodSummary } from '../types';
+import { UpdateRequest, SheetConfig, BotResponse, DayData, PeriodSummary, MonthSummary } from '../types';
 import { DateHelper } from '../utils/dateHelper';
 
 /**
@@ -384,5 +384,275 @@ ${this.getSaldoEmoji(data.saldo)} ${this.getSaldoMessage(data.saldo)}
 📈 Média diária: ${diasComDados > 0 ? this.formatCurrency((totalEntradas + totalSaidas + totalDiario) / diasComDados) : 'N/A'}
     `.trim();
   }
+
+  /**
+   * Lê os totais mensais da planilha (linha 40 e 43)
+   */
+  async getMonthTotals(month: number, year: number): Promise<MonthSummary | null> {
+    try {
+      const config = this.getSheetConfig(month, year);
+      
+      // Colunas dos totais (linha 40)
+      const entradaCol = this.columnToLetter(2 + config.columnOffset); // Coluna C + offset
+      const saidaCol = this.columnToLetter(3 + config.columnOffset);   // Coluna D + offset
+      const diarioCol = this.columnToLetter(4 + config.columnOffset);  // Coluna E + offset
+      
+      // Colunas da linha 43 (Saída Total e Performance)
+      const saidaTotalCol = this.columnToLetter(1 + config.columnOffset); // Coluna B + offset
+      const performanceCol = this.columnToLetter(4 + config.columnOffset); // Coluna E + offset
+      
+      // Lê todas as células em paralelo
+      const [entradas, saidas, diario, saidaTotal, performance] = await Promise.all([
+        this.sheetsService.readCell(`${entradaCol}40`),
+        this.sheetsService.readCell(`${saidaCol}40`),
+        this.sheetsService.readCell(`${diarioCol}40`),
+        this.sheetsService.readCell(`${saidaTotalCol}43`),
+        this.sheetsService.readCell(`${performanceCol}43`)
+      ]);
+
+      // Conta dias com dados
+      let diasComDados = 0;
+      const today = DateHelper.getBrasiliaTime();
+      const isCurrentMonth = month === today.getMonth() + 1 && year === today.getFullYear();
+      const maxDay = isCurrentMonth ? today.getDate() : config.endRow - config.startRow + 1;
+      
+      for (let day = 1; day <= maxDay; day++) {
+        const dayData = await this.getDayData(day, month, year);
+        if (dayData && (dayData.entrada > 0 || dayData.saida > 0 || dayData.diario > 0)) {
+          diasComDados++;
+        }
+      }
+
+      const totalEntradas = this.parseValue(entradas);
+      const totalSaidas = this.parseValue(saidas);
+      const totalDiario = this.parseValue(diario);
+      const totalSaidaTotal = this.parseValue(saidaTotal);
+      const performanceValue = this.parseValue(performance);
+      
+      const mediaDiaria = diasComDados > 0 
+        ? (totalEntradas + totalSaidas + totalDiario) / diasComDados 
+        : 0;
+
+      return {
+        month,
+        year,
+        totalEntradas,
+        totalSaidas,
+        totalDiario,
+        saidaTotal: totalSaidaTotal,
+        performance: performanceValue,
+        diasComDados,
+        mediaDiaria
+      };
+    } catch (error) {
+      console.error('Erro ao ler totais mensais:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Gera relatório mensal completo com Performance e Saída Total
+   */
+  async getCompleteMonthReport(month?: number, year?: number): Promise<string> {
+    const today = DateHelper.getBrasiliaTime();
+    const targetMonth = month || today.getMonth() + 1;
+    const targetYear = year || today.getFullYear();
+
+    const summary = await this.getMonthTotals(targetMonth, targetYear);
+
+    if (!summary) {
+      return '❌ Não foi possível obter os dados do mês.';
+    }
+
+    const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(
+      new Date(targetYear, targetMonth - 1, 1)
+    );
+
+    const performanceEmoji = summary.performance >= 0 ? '📈' : '📉';
+    const performanceText = summary.performance >= 0 
+      ? `Saldo POSITIVO! Você economizou! 🎉` 
+      : `Saldo NEGATIVO! Gastos superaram entradas ⚠️`;
+
+    return `
+📆 *RESUMO COMPLETO - ${monthName.toUpperCase()}/${targetYear}*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 *ENTRADAS:* ${this.formatCurrency(summary.totalEntradas)}
+💸 *SAÍDAS:* ${this.formatCurrency(summary.totalSaidas)}
+🍽️ *DIÁRIO:* ${this.formatCurrency(summary.totalDiario)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔻 *SAÍDA TOTAL:* ${this.formatCurrency(summary.saidaTotal)}
+   (Saídas + Diário)
+
+${performanceEmoji} *PERFORMANCE:* ${this.formatCurrency(summary.performance)}
+   ${performanceText}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Dias com registros: ${summary.diasComDados}
+📈 Média diária: ${this.formatCurrency(summary.mediaDiaria)}
+    `.trim();
+  }
+
+  /**
+   * Gera relatório de performance isolado
+   */
+  async getPerformanceReport(): Promise<string> {
+    const today = DateHelper.getBrasiliaTime();
+    const summary = await this.getMonthTotals(today.getMonth() + 1, today.getFullYear());
+
+    if (!summary) {
+      return '❌ Não foi possível calcular a performance.';
+    }
+
+    const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(today);
+    const performanceEmoji = summary.performance >= 0 ? '✅' : '⚠️';
+    const percentage = summary.totalEntradas > 0 
+      ? ((summary.performance / summary.totalEntradas) * 100).toFixed(1)
+      : '0';
+
+    return `
+${performanceEmoji} *PERFORMANCE - ${monthName.toUpperCase()}*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 Entradas: ${this.formatCurrency(summary.totalEntradas)}
+🔻 Saída Total: ${this.formatCurrency(summary.saidaTotal)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *RESULTADO:* ${this.formatCurrency(summary.performance)}
+📈 *Percentual:* ${percentage}%
+
+${summary.performance >= 0 
+  ? `✅ Você está economizando! Continue assim! 🎉`
+  : `⚠️ Seus gastos superaram as entradas em ${this.formatCurrency(Math.abs(summary.performance))}`}
+    `.trim();
+  }
+
+  /**
+   * Compara mês atual com mês anterior
+   */
+  async getComparisonReport(): Promise<string> {
+    const today = DateHelper.getBrasiliaTime();
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+    
+    let previousMonth = currentMonth - 1;
+    let previousYear = currentYear;
+    
+    if (previousMonth === 0) {
+      previousMonth = 12;
+      previousYear -= 1;
+    }
+
+    const [current, previous] = await Promise.all([
+      this.getMonthTotals(currentMonth, currentYear),
+      this.getMonthTotals(previousMonth, previousYear)
+    ]);
+
+    if (!current || !previous) {
+      return '❌ Não foi possível comparar os meses.';
+    }
+
+    const currentMonthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(
+      new Date(currentYear, currentMonth - 1, 1)
+    );
+    const previousMonthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(
+      new Date(previousYear, previousMonth - 1, 1)
+    );
+
+    const diffEntradas = current.totalEntradas - previous.totalEntradas;
+    const diffSaidas = current.saidaTotal - previous.saidaTotal;
+    const diffPerformance = current.performance - previous.performance;
+
+    const getArrow = (diff: number) => diff > 0 ? '📈' : diff < 0 ? '📉' : '➡️';
+
+    return `
+📊 *COMPARAÇÃO DE MESES*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${currentMonthName.toUpperCase()} vs ${previousMonthName.toUpperCase()}
+
+💰 *ENTRADAS:*
+${currentMonthName}: ${this.formatCurrency(current.totalEntradas)}
+${previousMonthName}: ${this.formatCurrency(previous.totalEntradas)}
+${getArrow(diffEntradas)} Diferença: ${this.formatCurrency(Math.abs(diffEntradas))} ${diffEntradas >= 0 ? 'a mais' : 'a menos'}
+
+🔻 *SAÍDA TOTAL:*
+${currentMonthName}: ${this.formatCurrency(current.saidaTotal)}
+${previousMonthName}: ${this.formatCurrency(previous.saidaTotal)}
+${getArrow(diffSaidas)} Diferença: ${this.formatCurrency(Math.abs(diffSaidas))} ${diffSaidas >= 0 ? 'a mais' : 'a menos'}
+
+${getArrow(diffPerformance)} *PERFORMANCE:*
+${currentMonthName}: ${this.formatCurrency(current.performance)}
+${previousMonthName}: ${this.formatCurrency(previous.performance)}
+Diferença: ${this.formatCurrency(Math.abs(diffPerformance))} ${diffPerformance >= 0 ? 'melhor' : 'pior'}
+    `.trim();
+  }
+
+  /**
+   * Gera previsão de fim de mês
+   */
+  async getForecastReport(): Promise<string> {
+    const today = DateHelper.getBrasiliaTime();
+    const currentDay = today.getDate();
+    const month = today.getMonth() + 1;
+    const year = today.getFullYear();
+    const config = this.getSheetConfig(month, year);
+    const daysInMonth = config.endRow - config.startRow + 1;
+    const daysRemaining = daysInMonth - currentDay;
+
+    const summary = await this.getMonthTotals(month, year);
+
+    if (!summary || summary.diasComDados === 0) {
+      return '❌ Não há dados suficientes para fazer previsão.';
+    }
+
+    // Média diária de saídas (saídas + diário)
+    const mediaSaidas = summary.totalSaidas / summary.diasComDados;
+    const mediaDiario = summary.totalDiario / summary.diasComDados;
+    const mediaSaidaTotal = (summary.totalSaidas + summary.totalDiario) / summary.diasComDados;
+
+    // Projeção para fim do mês
+    const projecaoSaidas = summary.totalSaidas + (mediaSaidas * daysRemaining);
+    const projecaoDiario = summary.totalDiario + (mediaDiario * daysRemaining);
+    const projecaoSaidaTotal = summary.saidaTotal + (mediaSaidaTotal * daysRemaining);
+    const projecaoPerformance = summary.totalEntradas - projecaoSaidaTotal;
+
+    const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(today);
+    const performanceEmoji = projecaoPerformance >= 0 ? '✅' : '⚠️';
+
+    return `
+🔮 *PREVISÃO DE FIM DE MÊS - ${monthName.toUpperCase()}*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📅 Dia atual: ${currentDay}/${daysInMonth}
+⏳ Dias restantes: ${daysRemaining}
+
+📊 *MÉDIAS DIÁRIAS:*
+💸 Saídas: ${this.formatCurrency(mediaSaidas)}/dia
+🍽️ Diário: ${this.formatCurrency(mediaDiario)}/dia
+🔻 Total: ${this.formatCurrency(mediaSaidaTotal)}/dia
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 *PROJEÇÃO PARA FIM DO MÊS:*
+
+💰 Entradas: ${this.formatCurrency(summary.totalEntradas)} (fixo)
+💸 Saídas: ${this.formatCurrency(projecaoSaidas)}
+🍽️ Diário: ${this.formatCurrency(projecaoDiario)}
+🔻 Saída Total: ${this.formatCurrency(projecaoSaidaTotal)}
+
+${performanceEmoji} *Performance Prevista:* ${this.formatCurrency(projecaoPerformance)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${projecaoPerformance >= 0 
+  ? `✅ Se manter esse ritmo, vai fechar o mês com saldo POSITIVO! 🎉`
+  : `⚠️ ATENÇÃO! Mantendo esse ritmo, o mês fecha NEGATIVO em ${this.formatCurrency(Math.abs(projecaoPerformance))}`}
+    `.trim();
+  }
 }
+
 

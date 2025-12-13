@@ -25,6 +25,24 @@ export class MessageHandler {
         return this.getHelpMessage();
       }
 
+      // Comandos especiais
+      if (parsed.type === 'performance') {
+        return await this.sheetUpdater.getPerformanceReport();
+      }
+
+      if (parsed.type === 'comparar') {
+        return await this.sheetUpdater.getComparisonReport();
+      }
+
+      if (parsed.type === 'previsao') {
+        return await this.sheetUpdater.getForecastReport();
+      }
+
+      // Comando "saldo dd/mm"
+      if (parsed.type === 'saldo' && parsed.targetDate) {
+        return await this.sheetUpdater.getDayReport(parsed.targetDate);
+      }
+
       // Se é comando de consulta (saldo/resumo)
       if (['hoje', 'semana', 'mes'].includes(parsed.type)) {
         return await this.handleQueryCommand(parsed.type as 'hoje' | 'semana' | 'mes');
@@ -68,7 +86,7 @@ export class MessageHandler {
         case 'semana':
           return await this.sheetUpdater.getWeekReport();
         case 'mes':
-          return await this.sheetUpdater.getMonthReport();
+          return await this.sheetUpdater.getCompleteMonthReport();
         default:
           return '❌ Comando de consulta inválido.';
       }
@@ -87,34 +105,35 @@ export class MessageHandler {
 
 📝 *ADICIONAR VALORES (soma ao existente):*
 
-*DIÁRIO:*
 • diario 87,10
-• diario 400 amanha
+• entrada 200 hoje
+• saida 94,90 amanha
 • 517 (adiciona no diário de hoje)
 
-*ENTRADA:*
-• entrada 352,91 01/01
-• entrada 200 hoje
+━━━━━━━━━━━━━━━━━━━━━━━━
 
-*SAÍDA:*
-• saida 94,90 hoje
-• saida 600 06/02
+🔄 *SUBSTITUIR VALORES:*
+
+• *sub 300 hoje*
+• *sub entrada 500*
+• *sub saida 100 16/12*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔄 *SUBSTITUIR VALORES (apaga e substitui):*
+📊 *CONSULTAS RÁPIDAS:*
 
-• *sub 300 hoje* → Substitui o diário de hoje por 300
-• *sub entrada 500* → Substitui entrada de hoje por 500
-• *sub saida 100 amanha* → Substitui saída de amanhã por 100
+• *saldo* ou *resumo* → Hoje
+• *saldo 16/12* → Saldo de data específica
+• *saldo semana* → Últimos 7 dias
+• *saldo mes* ou *mes* → Mês completo com Performance
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-📊 *CONSULTAR SALDOS:*
+📈 *ANÁLISES AVANÇADAS:*
 
-• *saldo* ou *resumo* → Resumo de hoje
-• *saldo semana* → Resumo dos últimos 7 dias
-• *saldo mes* → Resumo do mês atual
+• *performance* → Performance do mês (Entradas vs Saídas)
+• *comparar* → Mês atual vs mês anterior
+• *previsao* → Projeção de fim de mês
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -122,9 +141,9 @@ export class MessageHandler {
 • hoje • amanha • dd/mm • dd/mm/aaaa
 
 💡 *Dicas:*
-- Valores podem usar vírgula ou ponto como decimal
-- Sem "sub", os valores SÃO SOMADOS ao existente
-- Com "sub", o valor É SUBSTITUÍDO
+- Sem "sub", valores SÃO SOMADOS
+- Com "sub", valor É SUBSTITUÍDO
+- Use "mes" para ver Performance completa!
     `.trim();
   }
 

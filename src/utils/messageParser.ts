@@ -30,11 +30,20 @@ export class MessageParser {
   /**
    * Detecta o tipo de operação (entrada, saída, diário ou consulta)
    */
-  private static detectType(text: string): 'entrada' | 'saida' | 'diario' | 'saldo' | 'resumo' | 'hoje' | 'semana' | 'mes' {
+  private static detectType(text: string): 'entrada' | 'saida' | 'diario' | 'saldo' | 'resumo' | 'hoje' | 'semana' | 'mes' | 'performance' | 'comparar' | 'previsao' {
     const lower = text.toLowerCase();
     
     // Remove "sub" do texto para análise (será tratado separadamente)
     const cleanText = lower.replace(/^sub\s+/, '');
+    
+    // Novos comandos especiais
+    if (cleanText.match(/^(performance|desempenho)$/)) return 'performance';
+    if (cleanText.match(/^(comparar|comparacao|comparação)$/)) return 'comparar';
+    if (cleanText.match(/^(previsao|previsão|projecao|projeção|forecast)$/)) return 'previsao';
+    
+    // Comandos de consulta de saldo com data específica
+    // Exemplo: "saldo 16/12" ou "saldo hoje" ou "resumo 25/12"
+    if (cleanText.match(/^(saldo|resumo|extrato)\s+\d{1,2}\/\d{1,2}/)) return 'saldo';
     
     // Comandos de consulta (sem valor)
     if (cleanText.match(/^(saldo|resumo|extrato)\s*(hoje|hj)?$/)) return 'hoje';
@@ -57,6 +66,17 @@ export class MessageParser {
    */
   private static shouldReplace(text: string): boolean {
     return text.toLowerCase().trim().startsWith('sub ');
+  }
+
+  /**
+   * Extrai data específica de comandos como "saldo 16/12"
+   */
+  private static extractTargetDate(text: string): Date | undefined {
+    const match = text.match(/(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/);
+    if (match) {
+      return DateHelper.parseDate(match[1]);
+    }
+    return undefined;
   }
 
   /**
@@ -141,7 +161,29 @@ export class MessageParser {
     // Detecta o tipo
     const type = this.detectType(cleanMessage);
 
-    // Se é comando de consulta, não precisa de valor
+    // Se é comando de consulta especial (performance, comparar, previsão)
+    if (['performance', 'comparar', 'previsao'].includes(type)) {
+      return {
+        type: type as 'performance' | 'comparar' | 'previsao',
+        date: new Date(),
+        rawText: trimmed
+      };
+    }
+
+    // Se é comando "saldo dd/mm" (consulta de saldo em data específica)
+    if (type === 'saldo') {
+      const targetDate = this.extractTargetDate(cleanMessage);
+      if (targetDate) {
+        return {
+          type: 'saldo',
+          date: new Date(),
+          rawText: trimmed,
+          targetDate
+        };
+      }
+    }
+
+    // Se é comando de consulta básica (hoje, semana, mes)
     if (['hoje', 'semana', 'mes'].includes(type)) {
       return {
         type: type as 'hoje' | 'semana' | 'mes',
