@@ -188,9 +188,9 @@ export class SheetUpdater {
       const config = this.getSheetConfig(month, year);
       const rowNumber = this.getRowNumber(day, config);
       
-      // Lê as 4 colunas em uma única requisição usando range
+      // Lê as 4 colunas em uma única requisição usando range (C, D, E, F)
       const entradaCol = this.getColumnLetter('entrada', config.columnOffset);
-      const saldoCol = this.columnToLetter(5 + config.columnOffset);
+      const saldoCol = this.columnToLetter(6 + config.columnOffset); // F = offset + 6
       const range = `${entradaCol}${rowNumber}:${saldoCol}${rowNumber}`;
       
       const values = await this.sheetsService.readRange(range);
@@ -207,7 +207,7 @@ export class SheetUpdater {
         };
       }
 
-      const [entrada, saida, diario, , saldo] = values[0]; // 4 colunas: C, D, E, F (F é saldo)
+      const [entrada, saida, diario, saldo] = values[0]; // 4 colunas: C, D, E, F
 
       return {
         day,
