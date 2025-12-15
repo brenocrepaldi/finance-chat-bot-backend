@@ -37,18 +37,27 @@ export class WhatsAppBot {
       // Carrega sessão salva ou cria nova
       const { state, saveCreds } = await useMultiFileAuthState(authFolder);
 
+      // Logger customizado em modo silencioso para suprimir erros conhecidos
+      const logger = pino({ 
+        level: 'silent'
+      });
+
       // Cria conexão
       this.sock = makeWASocket({
         version,
         auth: state,
         printQRInTerminal: false,
-        logger: pino({ level: 'silent' }),
+        logger,
         browser: Browsers.macOS('Desktop'),
         syncFullHistory: false,
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: false,
         defaultQueryTimeoutMs: 60000,
         retryRequestDelayMs: 5000,
+        // Evita erros de descriptografia ignorando mensagens antigas
+        getMessage: async () => undefined,
+        // Desativa sincronização completa para evitar sobrecarga
+        shouldSyncHistoryMessage: () => false,
       });
 
       // Salva credenciais quando atualizadas
@@ -84,6 +93,15 @@ export class WhatsAppBot {
           const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
           const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
           
+          // Ignora erro 515 (Stream Errored) - é temporário e reconecta automaticamente
+          if (statusCode === 515) {
+            console.log('⚠️  Erro temporário de stream (515). Reconectando...');
+            setTimeout(() => {
+              this.connect(onMessage);
+            }, 2000);
+            return;
+          }
+          
           console.log('❌ Conexão fechada.');
           console.log('   Código:', statusCode);
           console.log('   Motivo:', lastDisconnect?.error?.message || 'desconhecido');
@@ -108,6 +126,13 @@ export class WhatsAppBot {
 
           // Ignora notificações e mensagens de status
           if (!msg.message) continue;
+          
+          // Ignora mensagens antigas (mais de 2 minutos)
+          const messageTimestamp = msg.messageTimestamp as number;
+          const now = Math.floor(Date.now() / 1000);
+          if (messageTimestamp && (now - messageTimestamp > 120)) {
+            continue;
+          }
 
           // Pega o remetente
           const from = msg.key.remoteJid!;

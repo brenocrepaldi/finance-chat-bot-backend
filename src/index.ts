@@ -80,10 +80,23 @@ async function main() {
 
 // Tratamento de erros não capturados
 process.on('unhandledRejection', (error: unknown) => {
+	// Ignora erros conhecidos de descriptografia do WhatsApp
+	const errorMsg = error instanceof Error ? error.message : String(error);
+	if (errorMsg.includes('Bad MAC') || 
+	    errorMsg.includes('decrypt') ||
+	    errorMsg.includes('Session error')) {
+		return; // Suprime silenciosamente
+	}
 	console.error('❌ Erro não tratado:', error);
 });
 
 process.on('uncaughtException', (error: Error) => {
+	// Ignora erros conhecidos de descriptografia do WhatsApp
+	if (error.message.includes('Bad MAC') || 
+	    error.message.includes('decrypt') ||
+	    error.message.includes('Session error')) {
+		return; // Suprime silenciosamente
+	}
 	console.error('❌ Exceção não capturada:', error);
 	process.exit(1);
 });
