@@ -2,13 +2,13 @@
   "name": "finance-whatsapp-bot",
   "version": "1.0.0",
   "description": "Bot de WhatsApp integrado com Google Sheets para controle financeiro",
-  "main": "dist/index.js",
+  "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "dev:server": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev:whatsapp": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "start:server": "node dist/server.js",
+    "start": "node dist/server.js",
+    "start:whatsapp": "node dist/index.js",
     "clean": "rm -rf dist",
     "test:sheets": "ts-node src/tests/test-sheets.ts"
   },
