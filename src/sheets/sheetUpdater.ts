@@ -307,10 +307,8 @@ informações deste dia.
     const saldoMsg = this.getSaldoMessage(data.saldo);
     
     return `
-┌──────────────────────┐
-  📊 RESUMO DO DIA     
-  ${dateStr}           
-└──────────────────────┘
+---  📊 RESUMO DO DIA ---    
+     ${dateStr}           
 
 💰 Entrada
    ${this.formatCurrency(data.entrada)}
